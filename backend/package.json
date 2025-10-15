@@ -1,0 +1,12 @@
+{
+  "name": "photopro-ai-backend",
+  "version": "1.0.0",
+  "description": "PhotoPro AI Backend API",
+  "main": "main.py",
+  "scripts": {
+    "start": "python3 main.py"
+  },
+  "engines": {
+    "python": "3.11"
+  }
+}
