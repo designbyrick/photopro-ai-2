@@ -2,9 +2,7 @@
 nixPkgs = ["python311", "postgresql"]
 
 [phases.install]
-cmds = ["pip install -r backend/requirements.txt"]
-
-[phases.build]
+cmds = ["cd backend && python -m pip install -r requirements.txt"]
 
 [start]
 cmd = "cd backend && python main.py"
