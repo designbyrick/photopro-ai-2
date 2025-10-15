@@ -3,7 +3,7 @@ PhotoPro AI - FastAPI Backend
 Main application entry point with all routes and middleware configuration.
 """
 
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -15,6 +15,7 @@ import replicate
 from PIL import Image
 import io
 import uuid
+import asyncio
 
 from database import get_db, engine, Base
 from models import User, GeneratedPhoto, CreditTransaction
@@ -27,6 +28,12 @@ from auth import (
     get_current_user, authenticate_user
 )
 from config import settings
+from middleware import RateLimitMiddleware, LoggingMiddleware, ErrorHandlingMiddleware
+from websocket import websocket_endpoint, notify_photo_status_update, notify_photo_completed, notify_photo_failed, notify_credits_updated
+from utils import validate_image_file, optimize_image_for_upload, generate_thumbnail, validate_style
+from admin import admin_router
+from docs import custom_openapi
+from monitoring import get_system_metrics, get_application_metrics, get_health_status, get_detailed_health
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -35,8 +42,18 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="PhotoPro AI API",
     description="AI-powered professional photo generation platform",
-    version="1.0.0"
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
+
+# Set custom OpenAPI schema
+app.openapi = custom_openapi
+
+# Add custom middleware
+app.add_middleware(ErrorHandlingMiddleware)
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(RateLimitMiddleware, calls=100, period=60)
 
 # CORS middleware
 app.add_middleware(
@@ -49,6 +66,9 @@ app.add_middleware(
 
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+# Include admin router
+app.include_router(admin_router)
 
 # AWS S3 client
 s3_client = boto3.client(
@@ -74,8 +94,33 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Basic health check endpoint"""
     return {"status": "healthy", "timestamp": datetime.utcnow()}
+
+
+@app.get("/health/detailed")
+async def detailed_health_check(db: Session = Depends(get_db)):
+    """Detailed health check with system metrics"""
+    return get_detailed_health()
+
+
+@app.get("/metrics/system")
+async def system_metrics():
+    """Get system performance metrics"""
+    return get_system_metrics()
+
+
+@app.get("/metrics/application")
+async def application_metrics(db: Session = Depends(get_db)):
+    """Get application-specific metrics"""
+    return get_application_metrics(db)
+
+
+# WebSocket endpoint for real-time updates
+@app.websocket("/ws/{user_id}")
+async def websocket_route(websocket: WebSocket, user_id: int):
+    """WebSocket endpoint for real-time photo processing updates"""
+    await websocket_endpoint(websocket, user_id)
 
 
 # Authentication endpoints
@@ -158,49 +203,53 @@ async def upload_photo(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user)
 ):
-    """Upload and validate image file"""
+    """Upload and validate image file with enhanced validation"""
     
-    # Validate file type
-    if not file.content_type.startswith('image/'):
-        raise HTTPException(status_code=400, detail="File must be an image")
-    
-    # Validate file size (max 10MB)
+    # Read file content
     file_content = await file.read()
-    if len(file_content) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File size must be less than 10MB")
     
-    # Validate image dimensions
-    try:
-        image = Image.open(io.BytesIO(file_content))
-        width, height = image.size
-        if width < 512 or height < 512:
-            raise HTTPException(
-                status_code=400, 
-                detail="Image must be at least 512x512 pixels"
-            )
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid image file")
+    # Validate image file
+    is_valid, error_message = validate_image_file(file_content, file.filename)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_message)
     
-    # Upload to S3
-    file_key = f"uploads/{current_user.id}/{uuid.uuid4()}.{file.filename.split('.')[-1]}"
+    # Optimize image for upload
+    optimized_content = optimize_image_for_upload(file_content)
+    
+    # Generate unique filename
+    file_extension = file.filename.split('.')[-1].lower()
+    unique_filename = f"{uuid.uuid4()}.{file_extension}"
+    file_key = f"uploads/{current_user.id}/{unique_filename}"
     
     try:
+        # Upload to S3
         s3_client.put_object(
             Bucket=settings.AWS_BUCKET_NAME,
             Key=file_key,
-            Body=file_content,
-            ContentType=file.content_type
+            Body=optimized_content,
+            ContentType=file.content_type,
+            Metadata={
+                'user_id': str(current_user.id),
+                'original_filename': file.filename,
+                'upload_timestamp': datetime.utcnow().isoformat()
+            }
         )
         
         # Generate S3 URL
         s3_url = f"https://{settings.AWS_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com/{file_key}"
         
+        # Get image dimensions for response
+        image = Image.open(io.BytesIO(optimized_content))
+        width, height = image.size
+        
         return {
             "message": "File uploaded successfully",
             "url": s3_url,
             "filename": file.filename,
-            "size": len(file_content),
-            "dimensions": {"width": width, "height": height}
+            "size": len(optimized_content),
+            "original_size": len(file_content),
+            "dimensions": {"width": width, "height": height},
+            "optimized": len(optimized_content) < len(file_content)
         }
         
     except Exception as e:
@@ -214,15 +263,14 @@ async def generate_photo(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Generate professional photo using AI"""
+    """Generate professional photo using AI with real-time updates"""
     
     # Check if user has enough credits
     if current_user.credits < 1:
         raise HTTPException(status_code=400, detail="Insufficient credits")
     
     # Validate style
-    valid_styles = ["corporate", "creative", "formal", "casual"]
-    if style not in valid_styles:
+    if not validate_style(style):
         raise HTTPException(status_code=400, detail="Invalid style. Must be one of: corporate, creative, formal, casual")
     
     # Create photo record
@@ -236,8 +284,13 @@ async def generate_photo(
     db.commit()
     db.refresh(photo)
     
+    # Notify user that processing has started
+    await notify_photo_status_update(current_user.id, photo.id, "processing", "Starting photo generation...")
+    
     try:
         # Process with Replicate API
+        await notify_photo_status_update(current_user.id, photo.id, "processing", "Processing with AI model...")
+        
         output = replicate_client.run(
             "tencentarc/photomaker:ddfc2b08d209f9fa8c1eca692712918bd449f695dabb4a958da31802a9570fe4",
             input={
@@ -255,8 +308,26 @@ async def generate_photo(
         if not processed_url:
             raise Exception("No output from AI model")
         
+        # Notify user that processing is complete
+        await notify_photo_status_update(current_user.id, photo.id, "processing", "Generating thumbnail...")
+        
         # Generate thumbnail
-        thumbnail_url = await generate_thumbnail(processed_url)
+        thumbnail_data = generate_thumbnail(processed_url)
+        thumbnail_url = processed_url  # Fallback to original if thumbnail fails
+        
+        if thumbnail_data:
+            # Upload thumbnail to S3
+            thumbnail_key = f"thumbnails/{current_user.id}/{uuid.uuid4()}.jpg"
+            try:
+                s3_client.put_object(
+                    Bucket=settings.AWS_BUCKET_NAME,
+                    Key=thumbnail_key,
+                    Body=thumbnail_data,
+                    ContentType='image/jpeg'
+                )
+                thumbnail_url = f"https://{settings.AWS_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com/{thumbnail_key}"
+            except Exception as e:
+                print(f"Thumbnail upload failed: {e}")
         
         # Update photo record
         photo.processed_url = processed_url
@@ -279,12 +350,19 @@ async def generate_photo(
         db.add(credit_transaction)
         db.commit()
         
+        # Notify user that photo is completed
+        await notify_photo_completed(current_user.id, photo.id, processed_url, thumbnail_url)
+        await notify_credits_updated(current_user.id, current_user.credits, "photo_generation")
+        
         return photo
         
     except Exception as e:
         # Update photo status to failed
         photo.status = "failed"
         db.commit()
+        
+        # Notify user of failure
+        await notify_photo_failed(current_user.id, photo.id, str(e))
         
         raise HTTPException(status_code=500, detail=f"Photo generation failed: {str(e)}")
 
