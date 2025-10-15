@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-PhotoPro AI - FastAPI Backend
-Simplified version for Railway deployment.
+PhotoPro AI - Simple Python server for Railway deployment
 """
 
 import os
@@ -20,7 +19,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for testing
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
