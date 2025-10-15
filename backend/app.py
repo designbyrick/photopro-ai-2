@@ -1,56 +1,19 @@
-"""
-PhotoPro AI - FastAPI Backend
-Alternative entry point for Railway deployment.
-"""
-
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
-import os
 
-# Initialize FastAPI app
-app = FastAPI(
-    title="PhotoPro AI API",
-    description="AI-powered professional photo generation platform",
-    version="1.0.0"
-)
-
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for testing
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI()
 
 @app.get("/")
-async def root():
-    """API information endpoint"""
+def read_root():
     return {
-        "message": "PhotoPro AI API",
-        "version": "1.0.0",
-        "status": "active",
+        "message": "PhotoPro AI API is running!",
+        "status": "success",
         "timestamp": datetime.utcnow().isoformat()
     }
 
 @app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy", 
-        "timestamp": datetime.utcnow().isoformat(),
-        "environment": os.getenv("RAILWAY_ENVIRONMENT", "development")
-    }
-
-@app.get("/test")
-async def test_endpoint():
-    """Test endpoint to verify deployment"""
-    return {
-        "message": "PhotoPro AI is running successfully!",
-        "deployment": "successful",
-        "timestamp": datetime.utcnow().isoformat()
-    }
+def health():
+    return {"status": "healthy"}
 
 if __name__ == "__main__":
     import uvicorn
