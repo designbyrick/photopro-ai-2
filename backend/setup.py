@@ -11,4 +11,9 @@ setup(
         "gunicorn==21.2.0",
     ],
     python_requires=">=3.11",
+    entry_points={
+        'console_scripts': [
+            'photopro-ai=app:app',
+        ],
+    },
 )

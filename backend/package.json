@@ -1,0 +1,16 @@
+{
+  "name": "photopro-ai-backend",
+  "version": "1.0.0",
+  "description": "PhotoPro AI Backend API",
+  "main": "app.py",
+  "scripts": {
+    "start": "python3 app.py",
+    "dev": "uvicorn app:app --reload --host 0.0.0.0 --port 8000"
+  },
+  "engines": {
+    "python": "3.11.6"
+  },
+  "keywords": ["fastapi", "python", "ai", "photography"],
+  "author": "PhotoPro AI Team",
+  "license": "MIT"
+}
