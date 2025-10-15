@@ -1,11 +1,10 @@
 """
-Simplified PhotoPro AI - FastAPI Backend
-Minimal version for Railway deployment testing.
+PhotoPro AI - FastAPI Backend
+Simplified version for Railway deployment.
 """
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
 from datetime import datetime
 import os
 
