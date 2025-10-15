@@ -13,3 +13,4 @@ replicate==0.22.0
 pillow==10.1.0
 requests==2.31.0
 python-dotenv==1.0.0
+psutil==5.9.6
