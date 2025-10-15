@@ -2,12 +2,6 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "./start.sh"
+startCommand = "gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
-
-[environments.production]
-variables = { PYTHON_VERSION = "3.11" }
-
-[environments.staging]
-variables = { PYTHON_VERSION = "3.11" }
