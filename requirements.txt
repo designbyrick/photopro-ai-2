@@ -1,0 +1,5 @@
+# PhotoPro AI - Main Requirements
+# This file helps Railway detect this as a Python project
+# The actual dependencies are in backend/requirements.txt
+
+-r backend/requirements.txt
