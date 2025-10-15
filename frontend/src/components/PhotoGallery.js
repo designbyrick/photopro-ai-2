@@ -6,7 +6,8 @@ import {
   Sparkles,
   AlertCircle,
   CheckCircle,
-  Clock
+  Clock,
+  Image as ImageIcon
 } from 'lucide-react';
 
 function PhotoGallery({ photos, loading, showAll = false }) {
