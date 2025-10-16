@@ -181,6 +181,25 @@ async def init_database():
     except Exception as e:
         return {"message": f"Error creating tables: {str(e)}", "status": "error"}
 
+@app.post("/test-signup")
+async def test_signup():
+    """Test signup functionality"""
+    try:
+        # Test database connection
+        db = SessionLocal()
+        db.close()
+        
+        # Test password hashing
+        test_hash = get_password_hash("test123")
+        
+        return {
+            "message": "Signup components working",
+            "password_hash": test_hash[:20] + "...",
+            "status": "success"
+        }
+    except Exception as e:
+        return {"message": f"Error in signup test: {str(e)}", "status": "error"}
+
 @app.get("/users")
 def get_users(db: Session = Depends(get_db)):
     users = db.query(User).all()
