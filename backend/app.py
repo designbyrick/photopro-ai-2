@@ -21,6 +21,14 @@ else:
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+# Database dependency
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 # Authentication setup
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production-12345")
 ALGORITHM = "HS256"
