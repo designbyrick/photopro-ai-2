@@ -193,7 +193,7 @@ async def test_signup():
         db.close()
         
         # Test password hashing
-        test_hash = get_password_hash("test123")
+        test_hash = get_password_hash("test")
         
         return {
             "message": "Signup components working",
