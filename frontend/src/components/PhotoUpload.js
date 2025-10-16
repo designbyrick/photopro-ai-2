@@ -4,7 +4,6 @@ import { photoAPI } from '../services/api';
 import toast from 'react-hot-toast';
 import { 
   Upload, 
-  Image as ImageIcon, 
   Sparkles, 
   AlertCircle,
   CheckCircle,

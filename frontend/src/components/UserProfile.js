@@ -3,13 +3,11 @@ import { creditAPI } from '../services/api';
 import toast from 'react-hot-toast';
 import { 
   User, 
-  Mail, 
   Calendar, 
   Coins, 
   Crown,
   CreditCard,
-  CheckCircle,
-  AlertCircle
+  CheckCircle
 } from 'lucide-react';
 
 const PLANS = [

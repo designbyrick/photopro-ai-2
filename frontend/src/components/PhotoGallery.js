@@ -3,7 +3,6 @@ import {
   Download, 
   Eye, 
   Calendar, 
-  Sparkles,
   AlertCircle,
   CheckCircle,
   Clock,
@@ -151,7 +150,7 @@ function PhotoGallery({ photos, loading, showAll = false }) {
               {photo.thumbnail_url ? (
                 <img
                   src={photo.thumbnail_url}
-                  alt={`${photo.style} style photo`}
+                  alt={`${photo.style} style`}
                   className="w-full h-full object-cover cursor-pointer"
                   onClick={() => setSelectedPhoto(photo)}
                 />
@@ -225,7 +224,7 @@ function PhotoGallery({ photos, loading, showAll = false }) {
                 <div className="space-y-4">
                   <img
                     src={selectedPhoto.processed_url}
-                    alt="Generated photo"
+                    alt="Generated result"
                     className="w-full max-w-2xl mx-auto rounded-lg shadow-lg"
                   />
                   

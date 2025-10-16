@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { photoAPI, creditAPI } from '../services/api';
 import toast from 'react-hot-toast';
@@ -12,21 +12,20 @@ import {
   History, 
   User, 
   LogOut,
-  Sparkles,
-  Coins
+  Sparkles
 } from 'lucide-react';
 
 function Dashboard() {
   const { user, logout, updateUser } = useAuth();
   const [activeTab, setActiveTab] = useState('upload');
   const [photos, setPhotos] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   const [credits, setCredits] = useState(user?.credits || 0);
 
   useEffect(() => {
     loadPhotoHistory();
     loadCredits();
-  }, []);
+  }, [loadCredits]);
 
   const loadPhotoHistory = async () => {
     try {
@@ -37,7 +36,7 @@ function Dashboard() {
     }
   };
 
-  const loadCredits = async () => {
+  const loadCredits = useCallback(async () => {
     try {
       const response = await creditAPI.getCredits();
       setCredits(response.data.credits);
@@ -45,7 +44,7 @@ function Dashboard() {
     } catch (error) {
       console.error('Failed to load credits:', error);
     }
-  };
+  }, [updateUser]);
 
   const handlePhotoGenerated = (newPhoto) => {
     setPhotos(prev => [newPhoto, ...prev]);
