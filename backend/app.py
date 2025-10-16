@@ -172,6 +172,15 @@ def health():
         "timestamp": datetime.utcnow().isoformat()
     }
 
+@app.post("/init-db")
+async def init_database():
+    """Initialize database tables"""
+    try:
+        Base.metadata.create_all(bind=engine)
+        return {"message": "Database tables created successfully", "status": "success"}
+    except Exception as e:
+        return {"message": f"Error creating tables: {str(e)}", "status": "error"}
+
 @app.get("/users")
 def get_users(db: Session = Depends(get_db)):
     users = db.query(User).all()
