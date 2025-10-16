@@ -22,10 +22,15 @@ function Dashboard() {
   const [loading] = useState(false);
   const [credits, setCredits] = useState(user?.credits || 0);
 
-  useEffect(() => {
-    loadPhotoHistory();
-    loadCredits();
-  }, [loadCredits]);
+  const loadCredits = useCallback(async () => {
+    try {
+      const response = await creditAPI.getCredits();
+      setCredits(response.data.credits);
+      updateUser({ credits: response.data.credits });
+    } catch (error) {
+      console.error('Failed to load credits:', error);
+    }
+  }, [updateUser]);
 
   const loadPhotoHistory = async () => {
     try {
@@ -36,15 +41,10 @@ function Dashboard() {
     }
   };
 
-  const loadCredits = useCallback(async () => {
-    try {
-      const response = await creditAPI.getCredits();
-      setCredits(response.data.credits);
-      updateUser({ credits: response.data.credits });
-    } catch (error) {
-      console.error('Failed to load credits:', error);
-    }
-  }, [updateUser]);
+  useEffect(() => {
+    loadPhotoHistory();
+    loadCredits();
+  }, [loadCredits]);
 
   const handlePhotoGenerated = (newPhoto) => {
     setPhotos(prev => [newPhoto, ...prev]);
