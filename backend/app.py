@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Text
@@ -9,6 +9,11 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
 import os
+import replicate
+import boto3
+from PIL import Image
+import io
+import base64
 
 # Database setup
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./photopro.db")
@@ -34,6 +39,30 @@ SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production-
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
+# AWS S3 setup
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_BUCKET_NAME = os.getenv("AWS_BUCKET_NAME", "photopro-ai-storage")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+
+# Replicate API setup
+REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
+
+# Initialize AWS S3 client
+if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
+    s3_client = boto3.client(
+        's3',
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+        region_name=AWS_REGION
+    )
+else:
+    s3_client = None
+
+# Initialize Replicate client
+if REPLICATE_API_TOKEN:
+    replicate.Client(api_token=REPLICATE_API_TOKEN)
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 
@@ -57,6 +86,20 @@ class UserResponse(BaseModel):
     username: str
     credits: int
     is_active: bool
+    created_at: datetime
+
+class PhotoGenerationRequest(BaseModel):
+    style: str
+    prompt: str = ""
+
+class PhotoGenerationResponse(BaseModel):
+    id: int
+    user_id: int
+    original_image_url: str
+    generated_image_url: str
+    style: str
+    prompt: str
+    status: str
     created_at: datetime
 
 # Database Models
@@ -282,6 +325,92 @@ def get_current_user_info(current_user: User = Depends(get_current_user)):
 @app.get("/auth/credits")
 def get_user_credits(current_user: User = Depends(get_current_user)):
     return {"credits": current_user.credits}
+
+# Photo generation endpoints
+@app.post("/photos/upload")
+async def upload_photo(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload a photo for AI generation"""
+    if not s3_client:
+        raise HTTPException(status_code=500, detail="S3 not configured")
+    
+    # Validate file type
+    if not file.content_type.startswith('image/'):
+        raise HTTPException(status_code=400, detail="File must be an image")
+    
+    # Generate unique filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"uploads/{current_user.id}/{timestamp}_{file.filename}"
+    
+    try:
+        # Upload to S3
+        file_content = await file.read()
+        s3_client.put_object(
+            Bucket=AWS_BUCKET_NAME,
+            Key=filename,
+            Body=file_content,
+            ContentType=file.content_type
+        )
+        
+        # Generate public URL
+        image_url = f"https://{AWS_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{filename}"
+        
+        return {
+            "message": "Photo uploaded successfully",
+            "image_url": image_url,
+            "filename": filename
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+@app.post("/photos/generate", response_model=PhotoGenerationResponse)
+async def generate_photo(
+    request: PhotoGenerationRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Generate AI photo using Replicate API"""
+    if not REPLICATE_API_TOKEN:
+        raise HTTPException(status_code=500, detail="Replicate API not configured")
+    
+    if current_user.credits < 1:
+        raise HTTPException(status_code=400, detail="Insufficient credits")
+    
+    try:
+        # Create photo record in database
+        db = SessionLocal()
+        photo = GeneratedPhoto(
+            user_id=current_user.id,
+            style=request.style,
+            prompt=request.prompt,
+            status="processing"
+        )
+        db.add(photo)
+        db.commit()
+        db.refresh(photo)
+        
+        # Deduct credit
+        current_user.credits -= 1
+        db.commit()
+        
+        # TODO: Implement actual Replicate API call
+        # For now, return mock response
+        return PhotoGenerationResponse(
+            id=photo.id,
+            user_id=photo.user_id,
+            original_image_url="",  # Will be set when uploaded
+            generated_image_url="",  # Will be set when generated
+            style=photo.style,
+            prompt=photo.prompt,
+            status=photo.status,
+            created_at=photo.created_at
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
+    finally:
+        db.close()
 
 if __name__ == "__main__":
     import uvicorn
