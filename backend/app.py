@@ -69,7 +69,7 @@ class User(Base):
     hashed_password = Column(String)
     credits = Column(Integer, default=10)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
 class GeneratedPhoto(Base):
     __tablename__ = "generated_photos"
@@ -80,7 +80,7 @@ class GeneratedPhoto(Base):
     generated_url = Column(String)
     style = Column(String)
     status = Column(String, default="processing")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -111,9 +111,9 @@ def get_password_hash(password):
 def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
+        expire = datetime.now() + timedelta(minutes=15)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -160,7 +160,7 @@ def read_root():
     return {
         "message": "PhotoPro AI API is running!",
         "status": "success",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now().isoformat(),
         "database": "connected" if DATABASE_URL.startswith("postgresql") else "sqlite"
     }
 
@@ -169,7 +169,7 @@ def health():
     return {
         "status": "healthy",
         "database": "connected" if DATABASE_URL.startswith("postgresql") else "sqlite",
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now().isoformat()
     }
 
 @app.post("/init-db")
