@@ -22,6 +22,7 @@ function Dashboard() {
   const [loading] = useState(false);
   const [credits, setCredits] = useState(user?.credits || 0);
 
+  // Load user credits from API
   const loadCredits = useCallback(async () => {
     try {
       const response = await creditAPI.getCredits();
