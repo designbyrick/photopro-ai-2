@@ -195,7 +195,7 @@ def get_photos(db: Session = Depends(get_db)):
 @app.post("/auth/signup", response_model=UserResponse)
 def signup(user: UserCreate, db: Session = Depends(get_db)):
     # Check if user already exists
-    db_user = get_user_by_email(db, email=user.email)
+    db_user = get_user_by_email(db, user.email)
     if db_user:
         raise HTTPException(
             status_code=400,
