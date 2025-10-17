@@ -37,8 +37,11 @@ class GeneratedPhoto(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     style = Column(String(20), nullable=False)  # corporate, creative, formal, casual
     original_url = Column(Text, nullable=False)
+    original_public_id = Column(String(255), nullable=True)  # Cloudinary public ID for original
     processed_url = Column(Text, nullable=True)
+    processed_public_id = Column(String(255), nullable=True)  # Cloudinary public ID for processed
     thumbnail_url = Column(Text, nullable=True)
+    thumbnail_public_id = Column(String(255), nullable=True)  # Cloudinary public ID for thumbnail
     credits_used = Column(Integer, default=1, nullable=False)
     status = Column(String(20), default="processing", nullable=False)  # processing, completed, failed
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
