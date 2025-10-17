@@ -9,6 +9,6 @@ if [ -f "requirements.txt" ]; then
     pip install -r requirements.txt
 fi
 
-# Start the application using main.py
-echo "🌟 Starting FastAPI application..."
-exec python main.py
+# Start the application using Gunicorn with Railway PORT
+echo "🌟 Starting FastAPI application with Gunicorn..."
+exec gunicorn -c gunicorn.conf.py app:app

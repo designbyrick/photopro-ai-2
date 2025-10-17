@@ -151,7 +151,11 @@ async def root():
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://photopro-ai-2.vercel.app",
+        "https://photopro-ai-2-dm1zfb8a3-designbyricks-projects.vercel.app",
+        "http://localhost:3000"  # For local development
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
