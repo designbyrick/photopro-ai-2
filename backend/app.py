@@ -288,14 +288,24 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_user)
     
-    return UserResponse(
-        id=db_user.id,
-        email=db_user.email,
-        username=db_user.username,
-        credits=db_user.credits,
-        is_active=db_user.is_active,
-        created_at=db_user.created_at
+    # Create access token for the new user
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": db_user.email}, expires_delta=access_token_expires
     )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": db_user.id,
+            "email": db_user.email,
+            "username": db_user.username,
+            "credits": db_user.credits,
+            "is_active": db_user.is_active,
+            "created_at": db_user.created_at
+        }
+    }
 
 @app.post("/auth/login", response_model=Token)
 def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
@@ -326,6 +336,17 @@ def get_current_user_info(current_user: User = Depends(get_current_user)):
 @app.get("/auth/credits")
 def get_user_credits(current_user: User = Depends(get_current_user)):
     return {"credits": current_user.credits}
+
+@app.get("/users/me")
+def get_current_user_info(current_user: User = Depends(get_current_user)):
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "username": current_user.username,
+        "credits": current_user.credits,
+        "is_active": current_user.is_active,
+        "created_at": current_user.created_at
+    }
 
 # Photo generation endpoints
 @app.post("/photos/upload")
