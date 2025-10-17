@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 import os
 import replicate
 from PIL import Image
@@ -59,6 +59,14 @@ class UserCreate(BaseModel):
     email: str
     username: str
     password: str
+    
+    @validator('password')
+    def validate_password(cls, v):
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters long')
+        if len(v.encode('utf-8')) > 72:
+            raise ValueError('Password must be 72 characters or less')
+        return v
 
 class UserLogin(BaseModel):
     email: str
