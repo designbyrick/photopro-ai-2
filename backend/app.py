@@ -10,10 +10,10 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 import os
 import replicate
-import boto3
 from PIL import Image
 import io
 import base64
+from storage import storage
 
 # Database setup
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./photopro.db")
@@ -39,25 +39,13 @@ SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production-
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# AWS S3 setup
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-AWS_BUCKET_NAME = os.getenv("AWS_BUCKET_NAME", "photopro-ai-storage")
-AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+# Cloudinary setup
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
 
 # Replicate API setup
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
-
-# Initialize AWS S3 client
-if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
-    s3_client = boto3.client(
-        's3',
-        aws_access_key_id=AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-        region_name=AWS_REGION
-    )
-else:
-    s3_client = None
 
 # Initialize Replicate client
 if REPLICATE_API_TOKEN:
@@ -121,8 +109,20 @@ class GeneratedPhoto(Base):
     user_id = Column(Integer, index=True)
     original_url = Column(String)
     generated_url = Column(String)
+    processed_url = Column(String)
     style = Column(String)
+    prompt = Column(String)
     status = Column(String, default="processing")
+    created_at = Column(DateTime, default=datetime.now)
+
+class CreditTransaction(Base):
+    __tablename__ = "credit_transactions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True)
+    amount = Column(Integer)
+    transaction_type = Column(String)
+    description = Column(String)
     created_at = Column(DateTime, default=datetime.now)
 
 # Create tables
@@ -150,8 +150,9 @@ def verify_password(plain_password, hashed_password):
 
 def get_password_hash(password):
     # Truncate password to 72 bytes (bcrypt limit)
-    if len(password.encode('utf-8')) > 72:
-        password = password[:72]
+    password_bytes = password.encode('utf-8')
+    if len(password_bytes) > 72:
+        password = password_bytes[:72].decode('utf-8', errors='ignore')
     return pwd_context.hash(password)
 
 def create_access_token(data: dict, expires_delta: timedelta = None):
@@ -333,41 +334,36 @@ async def upload_photo(
     current_user: User = Depends(get_current_user)
 ):
     """Upload a photo for AI generation"""
-    if not s3_client:
-        raise HTTPException(status_code=500, detail="S3 not configured")
-    
     # Validate file type
     if not file.content_type.startswith('image/'):
         raise HTTPException(status_code=400, detail="File must be an image")
     
-    # Generate unique filename
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"uploads/{current_user.id}/{timestamp}_{file.filename}"
-    
     try:
-        # Upload to S3
-        file_content = await file.read()
-        s3_client.put_object(
-            Bucket=AWS_BUCKET_NAME,
-            Key=filename,
-            Body=file_content,
-            ContentType=file.content_type
+        # Upload to Cloudinary
+        result = await storage.upload_photo(
+            file=file,
+            user_id=current_user.id,
+            folder="originals",
+            optimize=True
         )
-        
-        # Generate public URL
-        image_url = f"https://{AWS_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{filename}"
         
         return {
             "message": "Photo uploaded successfully",
-            "image_url": image_url,
-            "filename": filename
+            "image_url": result["url"],
+            "public_id": result["public_id"],
+            "filename": file.filename,
+            "format": result["format"],
+            "width": result["width"],
+            "height": result["height"]
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @app.post("/photos/generate", response_model=PhotoGenerationResponse)
 async def generate_photo(
-    request: PhotoGenerationRequest,
+    original_url: str = Form(...),
+    style: str = Form(...),
+    prompt: str = Form(""),
     current_user: User = Depends(get_current_user)
 ):
     """Generate AI photo using Replicate API"""
@@ -382,8 +378,9 @@ async def generate_photo(
         db = SessionLocal()
         photo = GeneratedPhoto(
             user_id=current_user.id,
-            style=request.style,
-            prompt=request.prompt,
+            original_url=original_url,
+            style=style,
+            prompt=prompt,
             status="processing"
         )
         db.add(photo)
@@ -394,18 +391,113 @@ async def generate_photo(
         current_user.credits -= 1
         db.commit()
         
-        # TODO: Implement actual Replicate API call
-        # For now, return mock response
-        return PhotoGenerationResponse(
-            id=photo.id,
-            user_id=photo.user_id,
-            original_image_url="",  # Will be set when uploaded
-            generated_image_url="",  # Will be set when generated
-            style=photo.style,
-            prompt=photo.prompt,
-            status=photo.status,
-            created_at=photo.created_at
-        )
+        # Initialize Replicate client
+        if not REPLICATE_API_TOKEN:
+            raise HTTPException(status_code=500, detail="Replicate API not configured")
+        
+        replicate_client = replicate.Client(api_token=REPLICATE_API_TOKEN)
+        
+        try:
+            # Select appropriate model and parameters based on style
+            model_params = {
+                "corporate": {
+                    "model": "tencentarc/photomaker:ddfc2b08d209f9fa8c1eca692712918bd449f695dabb4a958da31802a9570fe4",
+                    "style_strength": 25,
+                    "steps": 50
+                },
+                "creative": {
+                    "model": "tencentarc/photomaker:ddfc2b08d209f9fa8c1eca692712918bd449f695dabb4a958da31802a9570fe4",
+                    "style_strength": 30,
+                    "steps": 60
+                },
+                "formal": {
+                    "model": "tencentarc/photomaker:ddfc2b08d209f9fa8c1eca692712918bd449f695dabb4a958da31802a9570fe4",
+                    "style_strength": 20,
+                    "steps": 50
+                },
+                "casual": {
+                    "model": "tencentarc/photomaker:ddfc2b08d209f9fa8c1eca692712918bd449f695dabb4a958da31802a9570fe4",
+                    "style_strength": 35,
+                    "steps": 55
+                }
+            }
+            
+            params = model_params.get(style, model_params["corporate"])
+            
+            # Process with Replicate API using PhotoMaker model
+            output = replicate_client.run(
+                params["model"],
+                input={
+                    "input_image": original_url,
+                    "style": style,
+                    "num_outputs": 1,
+                    "style_strength_ratio": params["style_strength"],
+                    "num_inference_steps": params["steps"]
+                }
+            )
+            
+            # Get processed image URL
+            processed_url = output[0] if output else None
+            
+            if not processed_url:
+                raise Exception("No output from AI model")
+            
+            # Upload generated image to Cloudinary
+            try:
+                cloudinary_result = await storage.upload_from_url(
+                    url=processed_url,
+                    user_id=current_user.id,
+                    folder="generated",
+                    public_id=f"generated_{photo.id}_{style}"
+                )
+                
+                # Generate thumbnail
+                thumbnail_url = await storage.generate_thumbnail(
+                    public_id=cloudinary_result["public_id"],
+                    width=300,
+                    height=300
+                )
+                
+                # Update photo record with Cloudinary URLs
+                photo.processed_url = cloudinary_result["url"]
+                photo.processed_public_id = cloudinary_result["public_id"]
+                photo.thumbnail_url = thumbnail_url
+                photo.status = "completed"
+                db.commit()
+                
+            except Exception as cloudinary_error:
+                # Fallback to original URL if Cloudinary fails
+                photo.processed_url = processed_url
+                photo.status = "completed"
+                db.commit()
+                print(f"Cloudinary upload failed, using original URL: {cloudinary_error}")
+            
+            # Create credit transaction record
+            credit_transaction = CreditTransaction(
+                user_id=current_user.id,
+                amount=-1,
+                transaction_type="photo_generation",
+                description=f"Photo generation - {style} style"
+            )
+            db.add(credit_transaction)
+            db.commit()
+            
+            return PhotoGenerationResponse(
+                id=photo.id,
+                user_id=photo.user_id,
+                original_image_url=original_url,
+                generated_image_url=processed_url,
+                style=photo.style,
+                prompt=prompt,
+                status=photo.status,
+                created_at=photo.created_at
+            )
+            
+        except Exception as replicate_error:
+            # Update photo status to failed
+            photo.status = "failed"
+            db.commit()
+            raise HTTPException(status_code=500, detail=f"AI processing failed: {str(replicate_error)}")
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
