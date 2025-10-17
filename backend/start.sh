@@ -9,6 +9,6 @@ if [ -f "requirements.txt" ]; then
     pip install -r requirements.txt
 fi
 
-# Start the application using Gunicorn
-echo "🌟 Starting FastAPI application with Gunicorn..."
-exec gunicorn -c gunicorn.conf.py app:app
+# Start the application using Uvicorn directly
+echo "🌟 Starting FastAPI application..."
+exec python -m uvicorn app:app --host 0.0.0.0 --port 8080
