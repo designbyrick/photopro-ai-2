@@ -143,6 +143,11 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Test endpoint to verify app is running
+@app.get("/")
+async def root():
+    return {"message": "PhotoPro AI API is running!", "status": "healthy"}
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
