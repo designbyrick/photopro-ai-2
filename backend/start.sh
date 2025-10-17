@@ -9,6 +9,6 @@ if [ -f "requirements.txt" ]; then
     pip install -r requirements.txt
 fi
 
-# Start the application using Uvicorn directly
+# Start the application using main.py
 echo "🌟 Starting FastAPI application..."
-exec python -m uvicorn app:app --host 0.0.0.0 --port 8080
+exec python main.py
