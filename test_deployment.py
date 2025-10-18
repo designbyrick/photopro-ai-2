@@ -68,6 +68,61 @@ def test_frontend(frontend_url):
         print(f"❌ Frontend: FAILED (Error: {e})")
         return False
 
+def test_api_endpoints(backend_url):
+    """Test key API endpoints"""
+    print("\n🔍 Testing API Endpoints")
+    print("-" * 30)
+    
+    endpoints = [
+        ("/", "API information"),
+        ("/health", "Health check"),
+        ("/docs", "API documentation")
+    ]
+    
+    passed = 0
+    for endpoint, description in endpoints:
+        try:
+            response = requests.get(f"{backend_url}{endpoint}", timeout=10)
+            if response.status_code == 200:
+                print(f"✅ {endpoint}: {description} - OK")
+                passed += 1
+            else:
+                print(f"❌ {endpoint}: {description} - FAILED (Status: {response.status_code})")
+        except Exception as e:
+            print(f"❌ {endpoint}: {description} - ERROR ({e})")
+    
+    return passed == len(endpoints)
+
+def test_cors_configuration(backend_url, frontend_url):
+    """Test CORS configuration"""
+    print("\n🔗 Testing CORS Configuration")
+    print("-" * 30)
+    
+    try:
+        headers = {
+            'Origin': frontend_url,
+            'Access-Control-Request-Method': 'POST',
+            'Access-Control-Request-Headers': 'Content-Type'
+        }
+        
+        response = requests.options(f"{backend_url}/photos/upload", headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            cors_headers = response.headers.get('Access-Control-Allow-Origin', '')
+            if frontend_url in cors_headers or cors_headers == '*':
+                print("✅ CORS configuration: OK")
+                return True
+            else:
+                print(f"❌ CORS configuration: FAILED (Origin not allowed)")
+                return False
+        else:
+            print(f"❌ CORS configuration: FAILED (Status: {response.status_code})")
+            return False
+            
+    except Exception as e:
+        print(f"❌ CORS configuration: ERROR ({e})")
+        return False
+
 def main():
     """Main test function"""
     print("🧪 PhotoPro AI Deployment Test")
@@ -92,6 +147,7 @@ def main():
     backend_health = test_backend_health(backend_url)
     api_docs = test_api_docs(backend_url)
     detailed_health = test_detailed_health(backend_url)
+    api_endpoints = test_api_endpoints(backend_url)
     
     print()
     print("🎨 Testing Frontend...")
@@ -101,11 +157,18 @@ def main():
     frontend_ok = test_frontend(frontend_url)
     
     print()
+    print("🔗 Testing Integration...")
+    print("-" * 30)
+    
+    # Test integration
+    cors_ok = test_cors_configuration(backend_url, frontend_url)
+    
+    print()
     print("📊 Test Results Summary")
     print("=" * 40)
     
-    tests_passed = sum([backend_health, api_docs, detailed_health, frontend_ok])
-    total_tests = 4
+    tests_passed = sum([backend_health, api_docs, detailed_health, frontend_ok, api_endpoints, cors_ok])
+    total_tests = 6
     
     print(f"Tests passed: {tests_passed}/{total_tests}")
     

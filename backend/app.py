@@ -85,13 +85,16 @@ app = FastAPI(
 )
 
 # CORS middleware
+origins = [
+    "https://photopro-ai-2.vercel.app",
+    "https://*.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://photopro-ai-2.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:5173"
-    ],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -152,12 +155,13 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     return user
 
 @app.get("/")
-def read_root():
+async def root():
     return {
-        "message": "PhotoPro AI API is running!",
-        "status": "success",
-        "timestamp": datetime.utcnow().isoformat(),
-        "database": "connected" if DATABASE_URL.startswith("postgresql") else "sqlite"
+        "app": "PhotoPro AI Backend",
+        "status": "running",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "health": "/health"
     }
 
 @app.get("/api")
