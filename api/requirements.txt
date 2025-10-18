@@ -15,4 +15,4 @@ boto3==1.34.0
 replicate==0.22.0
 cloudinary==1.40.0
 Pillow==10.1.0
-mangum==0.17.0
+mangum>=0.17.0

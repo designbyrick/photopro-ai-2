@@ -1,11 +1,11 @@
-from mangum import Mangum
 import sys
-import os
+from pathlib import Path
 
-# Add the backend directory to the Python path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'backend'))
+# Add parent directory to path so we can import from backend
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app_vercel import app
+from mangum import Mangum
+from backend.app import app
 
-# Create the ASGI handler for Vercel
+# Vercel serverless handler
 handler = Mangum(app, lifespan="off")

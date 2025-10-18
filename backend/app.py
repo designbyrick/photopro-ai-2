@@ -89,8 +89,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://photopro-ai-2.vercel.app",
-        "https://photopro-ai-2-dm1zfb8a3-designbyricks-projects.vercel.app",
-        "http://localhost:3000"  # For local development
+        "http://localhost:3000",
+        "http://localhost:5173"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -159,6 +159,10 @@ def read_root():
         "timestamp": datetime.utcnow().isoformat(),
         "database": "connected" if DATABASE_URL.startswith("postgresql") else "sqlite"
     }
+
+@app.get("/api")
+async def api_root():
+    return {"message": "PhotoPro AI API", "status": "running", "docs": "/api/docs"}
 
 @app.get("/health")
 def health():
