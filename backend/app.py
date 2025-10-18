@@ -117,6 +117,14 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
 def get_user_by_email(db: Session, email: str):
     return db.query(User).filter(User.email == email).first()
 
+# Dependency to get database session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 def authenticate_user(db: Session, email: str, password: str):
     user = get_user_by_email(db, email)
     if not user:
@@ -142,14 +150,6 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     if user is None:
         raise credentials_exception
     return user
-
-# Dependency to get database session
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 @app.get("/")
 def read_root():
