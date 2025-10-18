@@ -9,6 +9,6 @@ if [ -f "requirements.txt" ]; then
     pip3 install -r requirements.txt
 fi
 
-# Start the application using Gunicorn with Railway PORT
-echo "🌟 Starting FastAPI application with Gunicorn..."
-exec python3 -m gunicorn app:app --bind 0.0.0.0:$PORT --workers 4 --worker-class uvicorn.workers.UvicornWorker
+# Start the application using Uvicorn directly with Railway PORT
+echo "🌟 Starting FastAPI application with Uvicorn..."
+exec python3 -m uvicorn app:app --host 0.0.0.0 --port $PORT
